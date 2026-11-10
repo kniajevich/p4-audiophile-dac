@@ -18,6 +18,8 @@ public:
     }
 
     esp_err_t init(NetworkMode mode = NetworkMode::AUTO_FALLBACK);
+    inline esp_err_t initAll() { return init(NetworkMode::AUTO_FALLBACK); }
+
     esp_err_t startDirectAP();
     esp_err_t startSTA();
     esp_err_t setCredentials(const std::string& ssid, const std::string& password);
@@ -26,7 +28,6 @@ public:
     bool isConnected() const { return m_connected; }
     bool isDirectAP() const { return m_is_ap; }
     
-    // Оба варианта для полной совместимости с main.cpp и вызовами
     std::string getIPAddress() const { return m_ip_str; }
     std::string getIpAddress() const { return m_ip_str; }
     
