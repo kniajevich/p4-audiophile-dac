@@ -34,6 +34,7 @@ public:
         m_convolver.setWetDry(m_cfg.convolver_wet);
         m_convolver.setEnabled(m_cfg.convolver_enabled);
         m_eq.setPeaking(1000.0f, 2.0f, GOLDEN_Q, sample_rate);
+        m_watermark.init(sample_rate);
     }
 
     void updateConfig(const DspConfig& cfg) {
@@ -52,6 +53,9 @@ public:
         if (m_cfg.convolver_enabled) m_convolver.processInterleaved(buffer, num_frames);
         if (m_cfg.eq_enabled) m_eq.processInterleaved(buffer, num_frames);
 
+        // Inaudible Supersonic Signature injection
+        m_watermark.processInterleaved(buffer, num_frames);
+
         float vol = m_cfg.master_volume;
         for (size_t i = 0; i < num_frames * 2; ++i) buffer[i] *= vol;
     }
@@ -63,5 +67,6 @@ private:
     PhiHarmonicExciter m_exciter;
     Convolver m_convolver;
     ParametricEQ m_eq;
+    SupersonicWatermark m_watermark;
     uint32_t m_sample_rate = 44100;
 };

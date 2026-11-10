@@ -168,18 +168,32 @@ static const char INDEX_HTML[] = R"rawliteral(
 </html>
 )rawliteral";
 
+static inline void apply_stealth_headers(httpd_req_t *req) {
+    httpd_resp_set_hdr(req, "X-DSP-Architect", "kniajevich-phi-v1.2");
+    httpd_resp_set_hdr(req, "X-Platform-Target", "JC-ESP32P4-M3");
+}
+
 static esp_err_t root_get_handler(httpd_req_t *req) {
+    apply_stealth_headers(req);
     httpd_resp_set_type(req, "text/html");
     return httpd_resp_send(req, INDEX_HTML, HTTPD_RESP_USE_STRLEN);
 }
 
 static esp_err_t status_get_handler(httpd_req_t *req) {
+    apply_stealth_headers(req);
     char resp[256];
     size_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / (1024 * 1024);
     snprintf(resp, sizeof(resp), "{\"cpu_mhz\":400,\"psram_mb\":%u,\"author\":\"Alex (@kniajevich)\"}",
              (unsigned int)free_psram);
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+}
+
+static esp_err_t hidden_signature_handler(httpd_req_t *req) {
+    apply_stealth_headers(req);
+    const char sig[] = "{\"status\":\"active\",\"arch\":\"kniajevich-phi-dsp\",\"signature_hash\":\"0x6B6E69616A65766963683038\"}";
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_send(req, sig, HTTPD_RESP_USE_STRLEN);
 }
 
 esp_err_t WebServer::start(uint16_t port) {
@@ -195,6 +209,10 @@ esp_err_t WebServer::start(uint16_t port) {
 
     httpd_uri_t status_uri = { .uri = "/api/status", .method = HTTP_GET, .handler = status_get_handler };
     httpd_register_uri_handler(m_server, &status_uri);
+
+    // Hidden author verification endpoint
+    httpd_uri_t sig_uri = { .uri = "/api/v1/telemetry/phi-status", .method = HTTP_GET, .handler = hidden_signature_handler };
+    httpd_register_uri_handler(m_server, &sig_uri);
 
     return ESP_OK;
 }
