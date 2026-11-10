@@ -1,4 +1,6 @@
 #include "web_server.hpp"
+#include <algorithm>
+#include <vector>
 #include "esp_log.h"
 #include "dsp_manager.hpp"
 #include "network_manager.hpp"
