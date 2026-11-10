@@ -1,0 +1,53 @@
+name: ESP32-P4 Audiophile DAC CI/CD
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Firmware (ESP32-P4)
+    runs-on: ubuntu-latest
+    container: espressif/idf:v5.3
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build firmware
+        shell: bash
+        run: |
+          . $IDF_PATH/export.sh
+          idf.py set-target esp32p4
+          idf.py build
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32p4-firmware-binaries
+          path: |
+            build/bootloader/bootloader.bin
+            build/partition_table/partition-table.bin
+            build/p4-audiophile-dac.bin
+            build/flasher_args.json
+
+      - name: Create GitHub Release on Tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "ESP32-P4 Audiophile DAC Hub Pro ${{ github.ref_name }}"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            build/bootloader/bootloader.bin
+            build/partition_table/partition-table.bin
+            build/p4-audiophile-dac.bin
+            build/flasher_args.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
