@@ -15,212 +15,344 @@ static const char INDEX_HTML[] = R"rawliteral(
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>ESP32-P4 Audiophile DAC Hub Pro</title>
+  <title>ESP32-P4 Master Reference DAC</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Alex+Brush&family=Cinzel+Decorative:wght@600;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #070a0f; --card: #0e1420; --border: #1a2538;
-      --accent: #38bdf8; --accent-glow: rgba(56, 189, 248, 0.3);
-      --accent-phi: #e3b341; --accent-green: #22c55e; --accent-red: #ef4444;
-      --text: #f1f5f9; --text-muted: #94a3b8;
+      --metal-base: #0a0b0e;
+      --metal-chassis: linear-gradient(180deg, #14161d 0%, #0c0d12 100%);
+      --metal-card: linear-gradient(145deg, #13151b, #0c0d11);
+      --gold: #d4af37;
+      --gold-bright: #f3e5ab;
+      --gold-dark: #8a7020;
+      --gold-gradient: linear-gradient(135deg, #f3e5ab 0%, #d4af37 50%, #8a7020 100%);
+      --ruby: #ef4444;
+      --text-main: #f1f5f9;
+      --text-dim: #8492a6;
     }
-    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    body { margin: 0; padding: 12px; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-    .container { max-width: 740px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
-    header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
-    h1 { font-size: 16px; margin: 0; font-weight: 700; display: flex; align-items: center; gap: 8px; }
-    .badge { font-size: 10px; padding: 2px 8px; border-radius: 12px; background: #0369a1; color: #fff; font-weight: 600; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+    body {
+      margin: 0; padding: 16px 8px; background: var(--metal-base); color: var(--text-main);
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      background-image: radial-gradient(circle at 50% 0%, #1a1e29 0%, #0a0b0e 80%);
+      min-height: 100vh;
+    }
+    .chassis {
+      max-width: 760px; margin: 0 auto; background: var(--metal-chassis);
+      border: 2px solid #050608; box-shadow: 0 25px 60px rgba(0,0,0,0.95), inset 0 1px 0 rgba(255,255,255,0.08);
+      border-radius: 12px; padding: 22px 18px; display: flex; flex-direction: column; gap: 18px;
+      position: relative; overflow: hidden;
+    }
     
-    .telemetry { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-    @media (max-width: 600px) { .telemetry { grid-template-columns: repeat(2, 1fr); } }
-    .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 8px; text-align: center; }
-    .stat-val { font-size: 13px; font-weight: 700; color: var(--accent); font-family: monospace; }
-    .stat-lbl { font-size: 9px; text-transform: uppercase; color: var(--text-muted); margin-top: 2px; }
+    /* Header */
+    .faceplate-header {
+      display: flex; justify-content: space-between; align-items: center;
+      border-bottom: 2px solid #07080a; padding-bottom: 14px; position: relative;
+    }
+    .faceplate-header::after {
+      content: ''; position: absolute; bottom: -3px; left: 0; right: 0; height: 1px; background: rgba(212, 175, 55, 0.15);
+    }
+    .brand h1 {
+      margin: 0; font-family: 'Cinzel Decorative', Georgia, serif; font-size: 18px; font-weight: 700;
+      letter-spacing: 0.14em; text-transform: uppercase;
+      background: var(--gold-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .brand .script-sub {
+      font-family: 'Alex Brush', cursive; font-size: 16px; color: var(--gold-bright); opacity: 0.85; margin-top: -2px;
+    }
+    
+    /* Tube Glass Bay */
+    .tube-glass-bay {
+      position: relative; background: rgba(12, 14, 18, 0.75); backdrop-filter: blur(14px);
+      border: 1px solid rgba(212, 175, 55, 0.22); border-radius: 8px; padding: 18px 14px;
+      box-shadow: inset 0 0 35px rgba(0,0,0,0.85);
+      overflow: hidden;
+    }
+    .tube-glow-ambient {
+      position: absolute; top: -50%; left: -20%; width: 140%; height: 200%;
+      background: radial-gradient(circle at 50% 50%, rgba(220, 38, 38, 0.22) 0%, rgba(185, 28, 28, 0.08) 40%, transparent 70%);
+      animation: tubeBreathing 3.236s infinite ease-in-out;
+      pointer-events: none; z-index: 0;
+    }
+    @keyframes tubeBreathing {
+      0%, 100% { opacity: 0.35; transform: scale(0.96); }
+      50% { opacity: 0.85; transform: scale(1.05); }
+    }
+    .tube-glass-bay > * { position: relative; z-index: 1; }
 
-    .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-    .card h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin: 0; display: flex; justify-content: space-between; align-items: center; }
+    /* Cards */
+    .rack-card {
+      background: var(--metal-card); border: 1px solid #07080a;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 5px 15px rgba(0,0,0,0.6);
+      border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 12px;
+    }
+    .rack-card h2 {
+      font-family: 'Cinzel Decorative', Georgia, serif; font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.12em; color: var(--gold); margin: 0;
+      display: flex; justify-content: space-between; align-items: center;
+    }
 
-    .source-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-    @media (max-width: 600px) { .source-grid { grid-template-columns: repeat(2, 1fr); } }
-    .src-btn { background: #070c14; border: 1px solid var(--border); border-radius: 6px; padding: 10px; text-align: center; color: var(--text-muted); font-size: 11px; font-weight: 600; cursor: pointer; }
-    .src-btn.active { background: #162235; border-color: var(--accent); color: #fff; box-shadow: 0 0 8px var(--accent-glow); }
+    /* Sources */
+    .source-bank { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    @media (max-width: 600px) { .source-bank { grid-template-columns: repeat(2, 1fr); } }
+    .btn-latch {
+      background: linear-gradient(180deg, #181a20 0%, #0d0f13 100%);
+      border: 1px solid #20242e; border-radius: 6px; padding: 12px 6px;
+      text-align: center; color: var(--text-dim); font-size: 11px; font-weight: 700;
+      letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: 0.2s;
+      font-family: 'Cormorant Garamond', Georgia, serif;
+    }
+    .btn-latch.active {
+      background: linear-gradient(180deg, #1c160b 0%, #100d06 100%);
+      border-color: var(--gold); color: var(--gold-bright);
+      box-shadow: 0 0 12px rgba(212, 175, 55, 0.35), inset 0 0 8px rgba(212, 175, 55, 0.2);
+    }
 
-    .vu-box { display: flex; flex-direction: column; gap: 4px; padding: 8px; background: #070c14; border-radius: 6px; border: 1px solid var(--border); }
-    .vu-line { display: flex; align-items: center; gap: 8px; font-size: 10px; font-family: monospace; }
-    .vu-bar { flex-grow: 1; height: 8px; background: #1e293b; border-radius: 4px; overflow: hidden; position: relative; }
-    .vu-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #22c55e 70%, #e3b341 85%, #ef4444 100%); transition: width 0.08s ease; }
+    /* Luxury Knobs with Pulsing Ruby Dots */
+    .knobs-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 4px;
+    }
+    @media (max-width: 600px) { .knobs-grid { grid-template-columns: repeat(2, 1fr); gap: 18px; } }
+    .knob-pod {
+      display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;
+    }
+    .knob-bezel {
+      width: 80px; height: 80px; border-radius: 50%;
+      background: #0e1014;
+      border: 1.5px solid var(--gold);
+      box-shadow: 0 10px 22px rgba(0,0,0,0.85), inset 0 0 10px rgba(0,0,0,0.9);
+      display: flex; justify-content: center; align-items: center; position: relative;
+    }
+    .knob-rotor {
+      width: calc(100% - 6px); height: calc(100% - 6px); border-radius: 50%;
+      background: radial-gradient(circle at 45% 45%, #1f222b 0%, #0c0d12 80%);
+      position: relative; transform: rotate(0deg); transition: transform 0.05s ease-out;
+    }
+    .knob-dot {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--ruby);
+      position: absolute; top: 6px; left: calc(50% - 3.5px);
+      animation: rubyPulse 1.618s infinite ease-in-out;
+    }
+    @keyframes rubyPulse {
+      0%, 100% { opacity: 0.65; transform: scale(0.9); box-shadow: 0 0 6px var(--ruby); }
+      50% { opacity: 1; transform: scale(1.15); box-shadow: 0 0 14px var(--ruby), 0 0 22px rgba(239, 68, 68, 0.8); }
+    }
+    .knob-label {
+      font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--text-dim); text-align: center;
+    }
+    .knob-value {
+      font-size: 13px; font-family: monospace; font-weight: 700; color: var(--gold-bright);
+    }
 
-    .drop-zone { border: 2px dashed var(--border); border-radius: 8px; padding: 18px; text-align: center; font-size: 11px; color: var(--text-muted); cursor: pointer; transition: 0.2s; background: #070c14; }
-    .drop-zone.hover { border-color: var(--accent); background: #0e1e30; }
+    /* VU Meter */
+    .meter-unit { background: #07080a; border: 1px solid #1a1e28; border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+    .meter-bar-outer { height: 10px; background: #11141b; border-radius: 5px; overflow: hidden; position: relative; border: 1px solid #050608; }
+    .meter-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #16a34a 65%, #ca8a04 85%, #dc2626 100%); transition: width 0.08s ease; }
 
-    .ctrl-row { display: flex; align-items: center; justify-content: space-between; font-size: 11px; font-family: monospace; }
-    input[type=range] { flex-grow: 1; margin: 0 10px; accent-color: var(--accent); }
-    .switch-wrap { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 600; }
-    .toggle { width: 34px; height: 18px; background: #263345; border-radius: 10px; position: relative; cursor: pointer; }
-    .toggle::after { content: ''; position: absolute; width: 14px; height: 14px; background: #fff; border-radius: 50%; top: 2px; left: 2px; transition: 0.2s; }
-    .toggle.active { background: var(--accent-green); }
-    .toggle.active::after { left: 18px; }
-
-    footer { text-align: center; font-size: 10px; color: var(--text-muted); border-top: 1px solid var(--border); padding-top: 10px; line-height: 1.5; }
-    footer a { color: var(--accent); text-decoration: none; }
+    footer {
+      margin-top: 8px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.06);
+      text-align: center; font-size: 12px; letter-spacing: 0.05em; color: var(--text-dim); line-height: 1.6;
+    }
+    footer a { color: var(--gold); text-decoration: none; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>ESP32-P4 Audiophile DAC Hub <span class="badge">JC-ESP32P4-M3</span></h1>
-      <div style="font-size: 11px; font-family: monospace; color: var(--accent-green);">● Online</div>
-    </header>
-
-    <div class="telemetry">
-      <div class="stat-card"><div class="stat-val">400 MHz</div><div class="stat-lbl">Dual RISC-V</div></div>
-      <div class="stat-card"><div class="stat-val">32 MB</div><div class="stat-lbl">PSRAM Buffer</div></div>
-      <div class="stat-card"><div class="stat-val">32-bit / 384k</div><div class="stat-lbl">PCM5102A Direct</div></div>
-      <div class="stat-card"><div class="stat-val">Wi-Fi 6 + ETH</div><div class="stat-lbl">Dual Net Link</div></div>
-    </div>
-
-    <div class="card">
-      <h2>Live Hardware VU Meter</h2>
-      <div class="vu-box">
-        <div class="vu-line"><span>L</span><div class="vu-bar"><div class="vu-fill" id="vuL"></div></div></div>
-        <div class="vu-line"><span>R</span><div class="vu-bar"><div class="vu-fill" id="vuR"></div></div></div>
+  <div class="chassis">
+    <div class="faceplate-header">
+      <div class="brand">
+        <h1>JC-ESP32P4 &bull; Reference DAC</h1>
+        <div class="script-sub">Audiophile Sound Reproduction Engine</div>
+      </div>
+      <div style="font-size: 11px; color: var(--gold); display: flex; align-items: center; gap: 6px;">
+        <span style="width: 7px; height: 7px; background: #22c55e; border-radius: 50%; box-shadow: 0 0 8px #22c55e;"></span>
+        STATION LOCKED
       </div>
     </div>
 
-    <div class="card">
-      <h2>Audio Source Routing</h2>
-      <div class="source-grid">
-        <div class="src-btn active" onclick="setSource(0)">Wi-Fi Stream (DLNA)</div>
-        <div class="src-btn" onclick="setSource(1)">Bluetooth 5 (A2DP)</div>
-        <div class="src-btn" onclick="setSource(2)">MicroSD (FLAC/DSD)</div>
-        <div class="src-btn" onclick="setSource(3)">100M Ethernet</div>
+    <!-- Precision VU Meter -->
+    <div class="rack-card">
+      <h2><span>Ballistic Level Indicator</span><span style="font-family:monospace; color:var(--text-dim); font-size:10px;">IEC-60268 DUAL VU</span></h2>
+      <div class="meter-unit">
+        <div style="display:flex; align-items:center; gap:8px;"><span style="font-size:11px; color:var(--text-dim); width:12px;">L</span><div class="meter-bar-outer" style="flex-grow:1;"><div class="meter-bar-fill" id="vuL"></div></div></div>
+        <div style="display:flex; align-items:center; gap:8px;"><span style="font-size:11px; color:var(--text-dim); width:12px;">R</span><div class="meter-bar-outer" style="flex-grow:1;"><div class="meter-bar-fill" id="vuR"></div></div></div>
       </div>
     </div>
 
-    <div class="card">
-      <h2>ViPER4Android & &Phi;-Harmonic DSP Architecture</h2>
-      <div class="ctrl-row">
-        <div class="switch-wrap"><span>Dynamic Bass</span><div class="toggle active" id="tgBass" onclick="toggleDSP('bass')"></div></div>
-        <input type="range" id="slBass" min="0" max="100" value="60" oninput="updateDSP()" />
-        <span id="valBass">60%</span>
-      </div>
-      <div class="ctrl-row">
-        <div class="switch-wrap"><span style="color:var(--accent-phi);">&Phi; Tube Exciter</span><div class="toggle active" id="tgExciter" onclick="toggleDSP('exciter')"></div></div>
-        <input type="range" id="slExciter" min="0" max="100" value="45" oninput="updateDSP()" />
-        <span id="valExciter">45%</span>
-      </div>
-      <div class="ctrl-row">
-        <div class="switch-wrap"><span>Convolver (IRS)</span><div class="toggle active" id="tgConv" onclick="toggleDSP('conv')"></div></div>
-        <input type="range" id="slConv" min="0" max="100" value="35" oninput="updateDSP()" />
-        <span id="valConv">35%</span>
-      </div>
-      <div class="ctrl-row">
-        <div class="switch-wrap"><span>Golden Q EQ</span><div class="toggle active" id="tgEq" onclick="toggleDSP('eq')"></div></div>
-        <input type="range" id="slEq" min="-12" max="12" value="2" oninput="updateDSP()" />
-        <span id="valEq">+2 dB</span>
-      </div>
-      <div class="ctrl-row">
-        <span>Master Digital Gain</span>
-        <input type="range" id="slVol" min="0" max="100" value="85" oninput="updateDSP()" />
-        <span id="valVol">85%</span>
+    <!-- Audio Route Selector -->
+    <div class="rack-card">
+      <h2>Audio Source Matrix</h2>
+      <div class="source-bank">
+        <div class="btn-latch active" onclick="setSource(0)">Wi-Fi Stream</div>
+        <div class="btn-latch" onclick="setSource(1)">Bluetooth 5.0</div>
+        <div class="btn-latch" onclick="setSource(2)">MicroSD Flac</div>
+        <div class="btn-latch" onclick="setSource(3)">100M Ethernet</div>
       </div>
     </div>
 
-    <div class="card">
-      <h2>IRS Acoustic Profile Drag & Drop Uploader</h2>
-      <div class="drop-zone" id="dropZone">
-        Drop custom <strong>.irs / .wav</strong> acoustic impulse file here or click to browse
+    <!-- Matte Black Knobs Bay with Pulsing Ruby Dots -->
+    <div class="tube-glass-bay">
+      <div class="tube-glow-ambient"></div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <span style="font-family:'Cinzel Decorative', serif; font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--gold-bright);">
+          &Phi; Harmonic Stage &amp; ViPER Engine
+        </span>
+        <span style="font-family:'Alex Brush', cursive; font-size:15px; color:#ef4444; letter-spacing:0.05em;">Warm Cathode Pulse</span>
+      </div>
+
+      <div class="knobs-grid">
+        <!-- Master Volume -->
+        <div class="knob-pod" id="podVol">
+          <div class="knob-bezel"><div class="knob-rotor" id="rotorVol"><div class="knob-dot"></div></div></div>
+          <div class="knob-label">Master Gain</div>
+          <div class="knob-value" id="valVol">85%</div>
+        </div>
+
+        <!-- Phi Exciter -->
+        <div class="knob-pod" id="podExciter">
+          <div class="knob-bezel"><div class="knob-rotor" id="rotorExciter"><div class="knob-dot"></div></div></div>
+          <div class="knob-label">&Phi; Warmth</div>
+          <div class="knob-value" id="valExciter">45%</div>
+        </div>
+
+        <!-- Dynamic Bass -->
+        <div class="knob-pod" id="podBass">
+          <div class="knob-bezel"><div class="knob-rotor" id="rotorBass"><div class="knob-dot"></div></div></div>
+          <div class="knob-label">ViPER Bass</div>
+          <div class="knob-value" id="valBass">60%</div>
+        </div>
+
+        <!-- IRS Convolver -->
+        <div class="knob-pod" id="podConv">
+          <div class="knob-bezel"><div class="knob-rotor" id="rotorConv"><div class="knob-dot"></div></div></div>
+          <div class="knob-label">IRS Wet/Dry</div>
+          <div class="knob-value" id="valConv">35%</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Convolver Loader -->
+    <div class="rack-card">
+      <h2><span>Acoustic Room Convolver (.irs)</span><span style="font-size:11px; color:var(--gold);">32MB PSRAM</span></h2>
+      <div style="border: 1px dashed rgba(212, 175, 55, 0.35); border-radius: 6px; padding: 14px; text-align: center; cursor: pointer; background: rgba(0,0,0,0.3);" onclick="document.getElementById('fileIrs').click()">
+        <div style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold-bright);" id="lblIrs">Tap to Mount Custom Impulse (.irs / .wav)</div>
         <input type="file" id="fileIrs" accept=".irs,.wav" style="display:none;" onchange="uploadIRS(this.files[0])" />
       </div>
     </div>
 
-    <div class="card">
-      <h2>Browser OTA Firmware Update</h2>
-      <div class="ctrl-row">
-        <span>Firmware Binary:</span>
-        <input type="file" id="fileOta" accept=".bin" />
-        <button style="background:#0284c7; color:#fff; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;" onclick="uploadOTA()">Flash OTA</button>
+    <!-- Dual-Partition OTA Flasher -->
+    <div class="rack-card">
+      <h2>Firmware Maintenance (OTA)</h2>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <input type="file" id="fileOta" accept=".bin" style="font-size:11px; color:var(--text-dim);" />
+        <button style="background:var(--gold-gradient); color:#121316; font-weight:700; font-size:11px; border:none; padding:8px 16px; border-radius:4px; cursor:pointer; text-transform:uppercase; letter-spacing:0.08em; font-family:'Cinzel Decorative', serif;" onclick="uploadOTA()">Flash</button>
       </div>
-      <div id="otaProgress" style="font-size:10px; color:var(--text-muted); font-family:monospace;"></div>
+      <div id="otaProgress" style="font-size:11px; font-family:monospace; color:var(--gold-bright);"></div>
     </div>
 
     <footer>
-      &copy; 2026 Alex (<a href="https://github.com/kniajevich" target="_blank">@kniajevich</a>). All Rights Reserved.<br/>
-      Contact: <a href="mailto:kniajevich@users.noreply.github.com">kniajevich@users.noreply.github.com</a><br/>
-      Licensed under GNU AGPLv3. Dual-Licensing Available for Commercial Production.
+      Designed &amp; Crafted by Alex (<a href="https://github.com/kniajevich" target="_blank">@kniajevich</a>)<br/>
+      Licensed under GNU AGPLv3 &bull; Inquiries: <a href="mailto:kniajevich@users.noreply.github.com">kniajevich@users.noreply.github.com</a>
     </footer>
   </div>
 
   <script>
-    let dspState = { bass: true, bassVal: 0.6, exciter: true, exciterVal: 0.45, conv: true, convVal: 0.35, eq: true, eqVal: 2.0, vol: 0.85, source: 0 };
+    let dsp = { vol: 0.85, exciter: 0.45, bass: 0.60, conv: 0.35, source: 0 };
 
     function setSource(idx) {
-      dspState.source = idx;
-      document.querySelectorAll('.src-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
+      dsp.source = idx;
+      document.querySelectorAll('.btn-latch').forEach((b, i) => b.classList.toggle('active', i === idx));
       sendState();
     }
 
-    function toggleDSP(param) {
-      dspState[param] = !dspState[param];
-      const ids = { bass: 'tgBass', exciter: 'tgExciter', conv: 'tgConv', eq: 'tgEq' };
-      document.getElementById(ids[param]).classList.toggle('active', dspState[param]);
-      sendState();
+    function setupKnob(podId, rotorId, valId, key, minVal, maxVal) {
+      const pod = document.getElementById(podId);
+      const rotor = document.getElementById(rotorId);
+      const valLabel = document.getElementById(valId);
+      let startY = 0, startVal = 0;
+
+      function updateRotor(normVal) {
+        const deg = -135 + normVal * 270;
+        rotor.style.transform = `rotate(${deg}deg)`;
+        valLabel.innerText = `${Math.round(normVal * 100)}%`;
+      }
+
+      updateRotor(dsp[key]);
+
+      function onMove(clientY) {
+        const delta = (startY - clientY) / 160.0;
+        dsp[key] = Math.max(minVal, Math.min(maxVal, startVal + delta));
+        updateRotor(dsp[key]);
+        sendState();
+      }
+
+      pod.addEventListener('mousedown', (e) => {
+        startY = e.clientY; startVal = dsp[key];
+        const onMouseMove = (ev) => onMove(ev.clientY);
+        const onMouseUp = () => {
+          window.removeEventListener('mousemove', onMouseMove);
+          window.removeEventListener('mouseup', onMouseUp);
+        };
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+      });
+
+      pod.addEventListener('touchstart', (e) => {
+        startY = e.touches[0].clientY; startVal = dsp[key];
+        const onTouchMove = (ev) => onMove(ev.touches[0].clientY);
+        const onTouchEnd = () => {
+          window.removeEventListener('touchmove', onTouchMove);
+          window.removeEventListener('touchend', onTouchEnd);
+        };
+        window.addEventListener('touchmove', onTouchMove);
+        window.addEventListener('touchend', onTouchEnd);
+      });
     }
 
-    function updateDSP() {
-      dspState.bassVal = parseInt(document.getElementById('slBass').value) / 100.0;
-      document.getElementById('valBass').innerText = `${Math.round(dspState.bassVal * 100)}%`;
-      dspState.exciterVal = parseInt(document.getElementById('slExciter').value) / 100.0;
-      document.getElementById('valExciter').innerText = `${Math.round(dspState.exciterVal * 100)}%`;
-      dspState.convVal = parseInt(document.getElementById('slConv').value) / 100.0;
-      document.getElementById('valConv').innerText = `${Math.round(dspState.convVal * 100)}%`;
-      dspState.eqVal = parseFloat(document.getElementById('slEq').value);
-      document.getElementById('valEq').innerText = `${dspState.eqVal > 0 ? '+' : ''}${dspState.eqVal} dB`;
-      dspState.vol = parseInt(document.getElementById('slVol').value) / 100.0;
-      document.getElementById('valVol').innerText = `${Math.round(dspState.vol * 100)}%`;
-      sendState();
-    }
+    setupKnob('podVol', 'rotorVol', 'valVol', 'vol', 0.0, 1.0);
+    setupKnob('podExciter', 'rotorExciter', 'valExciter', 'exciter', 0.0, 1.0);
+    setupKnob('podBass', 'rotorBass', 'valBass', 'bass', 0.0, 1.0);
+    setupKnob('podConv', 'rotorConv', 'valConv', 'conv', 0.0, 1.0);
 
     function sendState() {
-      fetch('/api/dsp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dspState) }).catch(() => {});
+      const payload = {
+        master_volume: dsp.vol,
+        phi_amount: dsp.exciter, phi_exciter_enabled: dsp.exciter > 0.01,
+        bass_intensity: dsp.bass, bass_enabled: dsp.bass > 0.01,
+        convolver_wet: dsp.conv, convolver_enabled: dsp.conv > 0.01,
+        active_source: dsp.source
+      };
+      fetch('/api/dsp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(() => {});
     }
 
-    // Live VU polling
     setInterval(() => {
       fetch('/api/vu').then(r => r.json()).then(data => {
-        document.getElementById('vuL').style.width = `${Math.min(100, data.l * 120)}%`;
-        document.getElementById('vuR').style.width = `${Math.min(100, data.r * 120)}%`;
+        document.getElementById('vuL').style.width = `${Math.min(100, data.l * 125)}%`;
+        document.getElementById('vuR').style.width = `${Math.min(100, data.r * 125)}%`;
       }).catch(() => {});
-    }, 100);
-
-    // Drag & Drop IRS uploader
-    const dz = document.getElementById('dropZone');
-    dz.onclick = () => document.getElementById('fileIrs').click();
-    dz.ondragover = (e) => { e.preventDefault(); dz.classList.add('hover'); };
-    dz.ondragleave = () => dz.classList.remove('hover');
-    dz.ondrop = (e) => {
-      e.preventDefault();
-      dz.classList.remove('hover');
-      if (e.dataTransfer.files.length) uploadIRS(e.dataTransfer.files[0]);
-    };
+    }, 90);
 
     function uploadIRS(file) {
       if (!file) return;
-      dz.innerText = `Uploading ${file.name}...`;
+      const lbl = document.getElementById('lblIrs');
+      lbl.innerText = `Loading ${file.name} to PSRAM...`;
       fetch('/api/upload-irs', { method: 'POST', body: file })
         .then(r => r.text())
-        .then(() => { dz.innerHTML = `Loaded: <strong>${file.name}</strong> into PSRAM!`; })
-        .catch(() => { dz.innerText = 'Upload failed!'; });
+        .then(() => { lbl.innerText = `Mounted: ${file.name}`; })
+        .catch(() => { lbl.innerText = 'Upload failed!'; });
     }
 
     function uploadOTA() {
       const f = document.getElementById('fileOta').files[0];
       if (!f) return alert('Select .bin file');
       const p = document.getElementById('otaProgress');
-      p.innerText = 'Flashing firmware to OTA partition...';
+      p.innerText = 'Flashing partition... Please wait.';
       fetch('/api/ota', { method: 'POST', body: f })
         .then(r => r.text())
-        .then(() => { p.innerText = 'Flash complete! Device rebooting...'; })
-        .catch(() => { p.innerText = 'OTA failed!'; });
+        .then(() => { p.innerText = 'Flash complete. System rebooting.'; })
+        .catch(() => { p.innerText = 'OTA Flash error!'; });
     }
   </script>
 </body>
@@ -285,7 +417,7 @@ esp_err_t WebServer::start(uint16_t port) {
     config.server_port = port;
     config.stack_size = 10240;
 
-    ESP_LOGI(TAG, "Starting HTTP Web Server on port %u...", port);
+    ESP_LOGI(TAG, "Starting Luxury HTTP Web Server on port %u...", port);
     if (httpd_start(&m_server, &config) != ESP_OK) return ESP_FAIL;
 
     httpd_uri_t root_uri = { .uri = "/", .method = HTTP_GET, .handler = root_get_handler };
