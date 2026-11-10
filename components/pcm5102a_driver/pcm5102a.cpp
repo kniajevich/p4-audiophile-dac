@@ -1,5 +1,6 @@
 #include "pcm5102a.hpp"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
 
 static const char* TAG = "PCM5102A";
 
