@@ -25,7 +25,11 @@ public:
 
     bool isConnected() const { return m_connected; }
     bool isDirectAP() const { return m_is_ap; }
+    
+    // Оба варианта для полной совместимости с main.cpp и вызовами
     std::string getIPAddress() const { return m_ip_str; }
+    std::string getIpAddress() const { return m_ip_str; }
+    
     std::string getSSID() const { return m_current_ssid; }
     std::string getAPSSID() const { return m_ap_ssid; }
 
