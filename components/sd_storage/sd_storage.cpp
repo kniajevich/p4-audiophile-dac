@@ -1,9 +1,11 @@
 #include "sd_storage.hpp"
+#include <dirent.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include "esp_vfs_fat.h"
 #include "driver/sdmmc_host.h"
 #include "sdmmc_cmd.h"
 #include "esp_log.h"
-#include <dirent>
 
 static const char* TAG = "SD_STORAGE";
 
@@ -55,7 +57,6 @@ esp_err_t SDStorage::loadIRSFile(const std::string& filename, std::vector<float>
     FILE* f = fopen(full_path.c_str(), "rb");
     if (!f) return ESP_ERR_NOT_FOUND;
 
-    // Read basic raw 16/32-bit samples (2048 taps fallback demo)
     const size_t taps = 2048;
     out_ir_l.resize(taps, 0.0f);
     out_ir_r.resize(taps, 0.0f);

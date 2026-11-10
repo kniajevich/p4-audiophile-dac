@@ -48,7 +48,6 @@ static const char INDEX_HTML[] = R"rawliteral(
       position: relative; overflow: hidden;
     }
     
-    /* Header */
     .faceplate-header {
       display: flex; justify-content: space-between; align-items: center;
       border-bottom: 2px solid #07080a; padding-bottom: 14px; position: relative;
@@ -65,7 +64,6 @@ static const char INDEX_HTML[] = R"rawliteral(
       font-family: 'Alex Brush', cursive; font-size: 16px; color: var(--gold-bright); opacity: 0.85; margin-top: -2px;
     }
     
-    /* Tube Glass Bay */
     .tube-glass-bay {
       position: relative; background: rgba(12, 14, 18, 0.75); backdrop-filter: blur(14px);
       border: 1px solid rgba(212, 175, 55, 0.22); border-radius: 8px; padding: 18px 14px;
@@ -80,11 +78,10 @@ static const char INDEX_HTML[] = R"rawliteral(
     }
     @keyframes tubeBreathing {
       0%, 100% { opacity: 0.35; transform: scale(0.96); }
-      50% { opacity: 0.85; transform: scale(1.05); }
+      50% { opacity: 1; transform: scale(1.05); }
     }
     .tube-glass-bay > * { position: relative; z-index: 1; }
 
-    /* Cards */
     .rack-card {
       background: var(--metal-card); border: 1px solid #07080a;
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 5px 15px rgba(0,0,0,0.6);
@@ -96,7 +93,6 @@ static const char INDEX_HTML[] = R"rawliteral(
       display: flex; justify-content: space-between; align-items: center;
     }
 
-    /* Sources */
     .source-bank { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
     @media (max-width: 600px) { .source-bank { grid-template-columns: repeat(2, 1fr); } }
     .btn-latch {
@@ -112,7 +108,6 @@ static const char INDEX_HTML[] = R"rawliteral(
       box-shadow: 0 0 12px rgba(212, 175, 55, 0.35), inset 0 0 8px rgba(212, 175, 55, 0.2);
     }
 
-    /* Luxury Knobs with Pulsing Ruby Dots */
     .knobs-grid {
       display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 4px;
     }
@@ -149,7 +144,6 @@ static const char INDEX_HTML[] = R"rawliteral(
       font-size: 13px; font-family: monospace; font-weight: 700; color: var(--gold-bright);
     }
 
-    /* VU Meter */
     .meter-unit { background: #07080a; border: 1px solid #1a1e28; border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
     .meter-bar-outer { height: 10px; background: #11141b; border-radius: 5px; overflow: hidden; position: relative; border: 1px solid #050608; }
     .meter-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #16a34a 65%, #ca8a04 85%, #dc2626 100%); transition: width 0.08s ease; }
@@ -174,7 +168,6 @@ static const char INDEX_HTML[] = R"rawliteral(
       </div>
     </div>
 
-    <!-- Precision VU Meter -->
     <div class="rack-card">
       <h2><span>Ballistic Level Indicator</span><span style="font-family:monospace; color:var(--text-dim); font-size:10px;">IEC-60268 DUAL VU</span></h2>
       <div class="meter-unit">
@@ -183,7 +176,6 @@ static const char INDEX_HTML[] = R"rawliteral(
       </div>
     </div>
 
-    <!-- Audio Route Selector -->
     <div class="rack-card">
       <h2>Audio Source Matrix</h2>
       <div class="source-bank">
@@ -194,7 +186,6 @@ static const char INDEX_HTML[] = R"rawliteral(
       </div>
     </div>
 
-    <!-- Matte Black Knobs Bay with Pulsing Ruby Dots -->
     <div class="tube-glass-bay">
       <div class="tube-glow-ambient"></div>
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
@@ -205,28 +196,24 @@ static const char INDEX_HTML[] = R"rawliteral(
       </div>
 
       <div class="knobs-grid">
-        <!-- Master Volume -->
         <div class="knob-pod" id="podVol">
           <div class="knob-bezel"><div class="knob-rotor" id="rotorVol"><div class="knob-dot"></div></div></div>
           <div class="knob-label">Master Gain</div>
           <div class="knob-value" id="valVol">85%</div>
         </div>
 
-        <!-- Phi Exciter -->
         <div class="knob-pod" id="podExciter">
           <div class="knob-bezel"><div class="knob-rotor" id="rotorExciter"><div class="knob-dot"></div></div></div>
           <div class="knob-label">&Phi; Warmth</div>
           <div class="knob-value" id="valExciter">45%</div>
         </div>
 
-        <!-- Dynamic Bass -->
         <div class="knob-pod" id="podBass">
           <div class="knob-bezel"><div class="knob-rotor" id="rotorBass"><div class="knob-dot"></div></div></div>
           <div class="knob-label">ViPER Bass</div>
           <div class="knob-value" id="valBass">60%</div>
         </div>
 
-        <!-- IRS Convolver -->
         <div class="knob-pod" id="podConv">
           <div class="knob-bezel"><div class="knob-rotor" id="rotorConv"><div class="knob-dot"></div></div></div>
           <div class="knob-label">IRS Wet/Dry</div>
@@ -235,7 +222,6 @@ static const char INDEX_HTML[] = R"rawliteral(
       </div>
     </div>
 
-    <!-- Convolver Loader -->
     <div class="rack-card">
       <h2><span>Acoustic Room Convolver (.irs)</span><span style="font-size:11px; color:var(--gold);">32MB PSRAM</span></h2>
       <div style="border: 1px dashed rgba(212, 175, 55, 0.35); border-radius: 6px; padding: 14px; text-align: center; cursor: pointer; background: rgba(0,0,0,0.3);" onclick="document.getElementById('fileIrs').click()">
@@ -244,7 +230,6 @@ static const char INDEX_HTML[] = R"rawliteral(
       </div>
     </div>
 
-    <!-- Dual-Partition OTA Flasher -->
     <div class="rack-card">
       <h2>Firmware Maintenance (OTA)</h2>
       <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
@@ -422,16 +407,36 @@ esp_err_t WebServer::start(uint16_t port) {
     ESP_LOGI(TAG, "Starting Luxury HTTP Web Server on port %u...", port);
     if (httpd_start(&m_server, &config) != ESP_OK) return ESP_FAIL;
 
-    httpd_uri_t root_uri = { .uri = "/", .method = HTTP_GET, .handler = root_get_handler };
+    httpd_uri_t root_uri = {
+        .uri = "/",
+        .method = HTTP_GET,
+        .handler = root_get_handler,
+        .user_ctx = nullptr
+    };
     httpd_register_uri_handler(m_server, &root_uri);
 
-    httpd_uri_t vu_uri = { .uri = "/api/vu", .method = HTTP_GET, .handler = vu_get_handler };
+    httpd_uri_t vu_uri = {
+        .uri = "/api/vu",
+        .method = HTTP_GET,
+        .handler = vu_get_handler,
+        .user_ctx = nullptr
+    };
     httpd_register_uri_handler(m_server, &vu_uri);
 
-    httpd_uri_t ota_uri = { .uri = "/api/ota", .method = HTTP_POST, .handler = ota_post_handler };
+    httpd_uri_t ota_uri = {
+        .uri = "/api/ota",
+        .method = HTTP_POST,
+        .handler = ota_post_handler,
+        .user_ctx = nullptr
+    };
     httpd_register_uri_handler(m_server, &ota_uri);
 
-    httpd_uri_t irs_uri = { .uri = "/api/upload-irs", .method = HTTP_POST, .handler = upload_irs_handler };
+    httpd_uri_t irs_uri = {
+        .uri = "/api/upload-irs",
+        .method = HTTP_POST,
+        .handler = upload_irs_handler,
+        .user_ctx = nullptr
+    };
     httpd_register_uri_handler(m_server, &irs_uri);
 
     return ESP_OK;
