@@ -1,0 +1,35 @@
+name: ESP32-P4 Audiophile DAC CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Firmware (ESP32-P4)
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:v5.3
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build firmware
+        run: |
+          . $IDF_PATH/export.sh
+          idf.py set-target esp32p4
+          idf.py build
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32p4-dac-firmware
+          path: |
+            build/bootloader/bootloader.bin
+            build/partition_table/partition-table.bin
+            build/p4-audiophile-dac.bin
+            build/flasher_args.json
