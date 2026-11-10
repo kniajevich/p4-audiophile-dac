@@ -11,16 +11,80 @@
 
 static const char* TAG = "NET_MGR";
 
-#define DIRECT_AP_SSID      "JC-P4-DirectDAC"
-#define DIRECT_AP_PASS      "audiophile123"    // WPA3-SAE пароль
 #define DIRECT_AP_CHANNEL   6
 #define DIRECT_AP_MAX_CONN  4
-
 #define STA_CONNECT_TIMEOUT_MS 5000
 
 static EventGroupHandle_t s_wifi_event_group;
 static const int WIFI_CONNECTED_BIT = BIT0;
 static const int WIFI_FAIL_BIT      = BIT1;
+
+void NetworkManager::loadCredentials() {
+    nvs_handle_t nvs;
+    if (nvs_open("wifi_store", NVS_READONLY, &nvs) == ESP_OK) {
+        char buf_ssid[64] = {0};
+        char buf_pass[64] = {0};
+        size_t len_ssid = sizeof(buf_ssid);
+        size_t len_pass = sizeof(buf_pass);
+        if (nvs_get_str(nvs, "ssid", buf_ssid, &len_ssid) == ESP_OK &&
+            nvs_get_str(nvs, "pass", buf_pass, &len_pass) == ESP_OK) {
+            m_sta_ssid = buf_ssid;
+            m_sta_pass = buf_pass;
+            ESP_LOGI(TAG, "Loaded stored Client Wi-Fi: %s", m_sta_ssid.c_str());
+        }
+
+        char buf_ap_ssid[64] = {0};
+        char buf_ap_pass[64] = {0};
+        size_t len_ap_ssid = sizeof(buf_ap_ssid);
+        size_t len_ap_pass = sizeof(buf_ap_pass);
+        if (nvs_get_str(nvs, "ap_ssid", buf_ap_ssid, &len_ap_ssid) == ESP_OK &&
+            nvs_get_str(nvs, "ap_pass", buf_ap_pass, &len_ap_pass) == ESP_OK) {
+            m_ap_ssid = buf_ap_ssid;
+            m_ap_pass = buf_ap_pass;
+            ESP_LOGI(TAG, "Loaded custom SoftAP config: %s", m_ap_ssid.c_str());
+        }
+        nvs_close(nvs);
+    }
+}
+
+void NetworkManager::saveCredentials(const std::string& ssid, const std::string& password) {
+    nvs_handle_t nvs;
+    if (nvs_open("wifi_store", NVS_READWRITE, &nvs) == ESP_OK) {
+        nvs_set_str(nvs, "ssid", ssid.c_str());
+        nvs_set_str(nvs, "pass", password.c_str());
+        nvs_commit(nvs);
+        nvs_close(nvs);
+        m_sta_ssid = ssid;
+        m_sta_pass = password;
+    }
+}
+
+void NetworkManager::saveAPCredentials(const std::string& ssid, const std::string& password) {
+    nvs_handle_t nvs;
+    if (nvs_open("wifi_store", NVS_READWRITE, &nvs) == ESP_OK) {
+        nvs_set_str(nvs, "ap_ssid", ssid.c_str());
+        nvs_set_str(nvs, "ap_pass", password.c_str());
+        nvs_commit(nvs);
+        nvs_close(nvs);
+        m_ap_ssid = ssid;
+        m_ap_pass = password;
+        ESP_LOGI(TAG, "Custom SoftAP persistently saved to NVS");
+    }
+}
+
+esp_err_t NetworkManager::setCredentials(const std::string& ssid, const std::string& password) {
+    saveCredentials(ssid, password);
+    return startSTA();
+}
+
+esp_err_t NetworkManager::setAPCredentials(const std::string& ssid, const std::string& password) {
+    if (ssid.empty() || password.length() < 8) return ESP_ERR_INVALID_ARG;
+    saveAPCredentials(ssid, password);
+    if (m_is_ap) {
+        return startDirectAP();
+    }
+    return ESP_OK;
+}
 
 void NetworkManager::wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     NetworkManager* self = static_cast<NetworkManager*>(arg);
@@ -33,18 +97,10 @@ void NetworkManager::wifi_event_handler(void* arg, esp_event_base_t event_base, 
             case WIFI_EVENT_STA_DISCONNECTED:
                 self->m_connected = false;
                 xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-                ESP_LOGW(TAG, "Station disconnected from AP");
                 break;
-            case WIFI_EVENT_AP_STACONNECTED: {
-                auto* event = (wifi_event_ap_staconnected_t*)event_data;
-                ESP_LOGI(TAG, "Client authenticated via WPA3-SAE on Direct AP: MAC=" MACSTR ", AID=%d", MAC2STR(event->mac), event->aid);
+            case WIFI_EVENT_AP_STACONNECTED:
+                ESP_LOGI(TAG, "Client joined SoftAP");
                 break;
-            }
-            case WIFI_EVENT_AP_STADISCONNECTED: {
-                auto* event = (wifi_event_ap_stadisconnected_t*)event_data;
-                ESP_LOGI(TAG, "Client disconnected from Direct AP: MAC=" MACSTR ", AID=%d", MAC2STR(event->mac), event->aid);
-                break;
-            }
             default:
                 break;
         }
@@ -57,7 +113,7 @@ void NetworkManager::wifi_event_handler(void* arg, esp_event_base_t event_base, 
             self->m_connected = true;
             self->m_is_ap = false;
             xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-            ESP_LOGI(TAG, "Station connected! Assigned IP: %s", ip);
+            ESP_LOGI(TAG, "Station connected! Local IP: %s", ip);
         }
     }
 }
@@ -65,6 +121,14 @@ void NetworkManager::wifi_event_handler(void* arg, esp_event_base_t event_base, 
 esp_err_t NetworkManager::init(NetworkMode mode) {
     m_mode = mode;
     s_wifi_event_group = xEventGroupCreate();
+
+    esp_err_t nvs_ret = nvs_flash_init();
+    if (nvs_ret == ESP_ERR_NVS_NO_FREE_PAGES || nvs_ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ESP_ERROR_CHECK(nvs_flash_init());
+    }
+
+    loadCredentials();
 
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -78,42 +142,30 @@ esp_err_t NetworkManager::init(NetworkMode mode) {
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, this, nullptr));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, this, nullptr));
 
-    if (m_mode == NetworkMode::DIRECT_AP) {
+    if (m_mode == NetworkMode::DIRECT_AP || m_sta_ssid.empty()) {
         return startDirectAP();
-    } else if (m_mode == NetworkMode::STA_ONLY) {
-        return startSTA();
     }
 
-    ESP_LOGI(TAG, "Attempting Station connection (Timeout: %d ms)...", STA_CONNECT_TIMEOUT_MS);
+    ESP_LOGI(TAG, "Attempting STA connection to %s (Timeout: %d ms)...", m_sta_ssid.c_str(), STA_CONNECT_TIMEOUT_MS);
     esp_err_t ret = startSTA();
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Station start failed, activating Direct SoftAP fallback");
-        return startDirectAP();
-    }
+    if (ret != ESP_OK) return startDirectAP();
 
-    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
-                                          WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-                                          pdFALSE, pdFALSE,
-                                          pdMS_TO_TICKS(STA_CONNECT_TIMEOUT_MS));
+    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT, pdFALSE, pdFALSE, pdMS_TO_TICKS(STA_CONNECT_TIMEOUT_MS));
+    if (bits & WIFI_CONNECTED_BIT) return ESP_OK;
 
-    if (bits & WIFI_CONNECTED_BIT) {
-        ESP_LOGI(TAG, "Home Network Link established successfully.");
-        return ESP_OK;
-    } else {
-        ESP_LOGW(TAG, "Home AP unreachable. Elevating to Direct SoftAP (WPA3-SAE / HT40)... ");
-        return startDirectAP();
-    }
+    ESP_LOGW(TAG, "Home router unreachable. Falling back to Direct SoftAP...");
+    return startDirectAP();
 }
 
 esp_err_t NetworkManager::startDirectAP() {
     esp_wifi_stop();
 
     wifi_config_t ap_config = {};
-    strcpy((char*)ap_config.ap.ssid, DIRECT_AP_SSID);
-    strcpy((char*)ap_config.ap.password, DIRECT_AP_PASS);
-    ap_config.ap.ssid_len = strlen(DIRECT_AP_SSID);
+    strncpy((char*)ap_config.ap.ssid, m_ap_ssid.c_str(), sizeof(ap_config.ap.ssid) - 1);
+    strncpy((char*)ap_config.ap.password, m_ap_pass.c_str(), sizeof(ap_config.ap.password) - 1);
+    ap_config.ap.ssid_len = m_ap_ssid.length();
     ap_config.ap.channel = DIRECT_AP_CHANNEL;
-    ap_config.ap.authmode = WIFI_AUTH_WPA3_PSK; // Чистый WPA3-Personal (SAE)
+    ap_config.ap.authmode = WIFI_AUTH_WPA3_PSK;
     ap_config.ap.max_connection = DIRECT_AP_MAX_CONN;
     ap_config.ap.beacon_interval = 100;
 
@@ -125,24 +177,17 @@ esp_err_t NetworkManager::startDirectAP() {
     m_is_ap = true;
     m_connected = true;
     m_ip_str = "192.168.4.1";
-    m_current_ssid = DIRECT_AP_SSID;
-
-    ESP_LOGI(TAG, "===================================================");
-    ESP_LOGI(TAG, " SECURE HIGH-SPEED DAC SOFTAP ONLINE (WPA3-SAE)");
-    ESP_LOGI(TAG, " SSID:     %s", DIRECT_AP_SSID);
-    ESP_LOGI(TAG, " Security: WPA3-Personal (SAE Handshake, PMF Active)");
-    ESP_LOGI(TAG, " Password: %s", DIRECT_AP_PASS);
-    ESP_LOGI(TAG, " Band:     2.4GHz HT40 (Up to 150-229 Mbps Link)");
-    ESP_LOGI(TAG, " Gateway:  http://192.168.4.1");
-    ESP_LOGI(TAG, "===================================================");
-
+    m_current_ssid = m_ap_ssid;
     return ESP_OK;
 }
 
 esp_err_t NetworkManager::startSTA() {
+    if (m_sta_ssid.empty()) return ESP_FAIL;
+
+    esp_wifi_stop();
     wifi_config_t sta_config = {};
-    strcpy((char*)sta_config.sta.ssid, "HomeAudioNet");
-    strcpy((char*)sta_config.sta.password, "audiophile123");
+    strncpy((char*)sta_config.sta.ssid, m_sta_ssid.c_str(), sizeof(sta_config.sta.ssid) - 1);
+    strncpy((char*)sta_config.sta.password, m_sta_pass.c_str(), sizeof(sta_config.sta.password) - 1);
     sta_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
@@ -150,6 +195,6 @@ esp_err_t NetworkManager::startSTA() {
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_ERROR_CHECK(esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT40));
 
-    m_current_ssid = (char*)sta_config.sta.ssid;
+    m_current_ssid = m_sta_ssid;
     return ESP_OK;
 }
