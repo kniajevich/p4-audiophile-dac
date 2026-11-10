@@ -4,28 +4,33 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "pcm5102a.hpp"
-#include "dynamic_bass.hpp"
-#include "parametric_eq.hpp"
+#include "dsp_manager.hpp"
+#include "network_manager.hpp"
+#include "web_server.hpp"
 
 static const char* TAG = "APP_MAIN";
 
 PCM5102ADriver dac;
-DynamicBass dynamic_bass;
-ParametricEQ eq_1khz;
 
 extern "C" void app_main() {
-    ESP_LOGI(TAG, "=== ESP32-P4 Audiophile Network DAC starting ===");
+    ESP_LOGI(TAG, "=== JC-ESP32P4-M3 Audiophile DAC Hub Starting ===");
 
-    // 1. Initialize PCM5102A I2S Driver at 32-bit / 44.1 kHz
+    // 1. Initialize Network Subsystems (Wi-Fi 6 via ESP32-C6 & 100M Ethernet)
+    NetworkManager::instance().initAll();
+
+    // 2. Start Embedded Web Console on Port 80
+    WebServer::instance().start(80);
+
+    // 3. Initialize PCM5102A DAC Hardware (32-bit / 44.1 kHz)
     ESP_ERROR_CHECK(dac.init(44100, I2S_DATA_BIT_WIDTH_32BIT));
 
-    // 2. Configure ViPER-style DSP pipeline
-    dynamic_bass.setIntensity(0.6f); // 60% harmonic boost
-    eq_1khz.setPeaking(1000.0f, 3.0f, 1.414f, 44100.0f); // +3dB acoustic presence
+    // 4. Initialize Hardware DSP Engine
+    DspManager::instance().init(44100);
 
-    ESP_LOGI(TAG, "DSP Pipeline & PCM5102A DAC initialized successfully.");
+    ESP_LOGI(TAG, "Audiophile System Ready. Web Console available at http://%s/",
+             NetworkManager::instance().getIpAddress().c_str());
 
-    // Test Tone Generator (440 Hz Sine)
+    // High-Resolution 32-bit Audio Stream Loop
     const size_t frames = 256;
     std::vector<float> float_buffer(frames * 2);
     std::vector<int32_t> pcm32_buffer(frames * 2);
@@ -35,18 +40,17 @@ extern "C" void app_main() {
     while (true) {
         // Generate Sine Stereo stream
         for (size_t i = 0; i < frames * 2; i += 2) {
-            float sample = std::sin(phase) * 0.4f;
-            float_buffer[i] = sample;
-            float_buffer[i + 1] = sample;
+            float s = std::sin(phase) * 0.4f;
+            float_buffer[i] = s;
+            float_buffer[i + 1] = s;
             phase += phase_inc;
             if (phase >= 2.0f * M_PI) phase -= 2.0f * M_PI;
         }
 
-        // Run ViPER DSP Chain
-        dynamic_bass.processInterleaved(float_buffer.data(), frames, 44100.0f);
-        eq_1khz.processInterleaved(float_buffer.data(), frames);
+        // Process Real-time ViPER DSP Pipeline
+        DspManager::instance().process(float_buffer.data(), frames);
 
-        // Convert Float32 (-1.0..1.0) to 32-bit Signed PCM for PCM5102A
+        // Convert Float32 to 32-bit Signed PCM for TI PCM5102A DAC
         for (size_t i = 0; i < frames * 2; ++i) {
             pcm32_buffer[i] = static_cast<int32_t>(float_buffer[i] * 2147483647.0f);
         }
