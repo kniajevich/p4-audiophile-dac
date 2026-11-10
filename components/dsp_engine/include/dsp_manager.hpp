@@ -4,6 +4,7 @@
 #include "parametric_eq.hpp"
 #include "phi_dsp.hpp"
 #include "convolver.hpp"
+#include <atomic>
 
 struct DspConfig {
     float master_volume = 0.85f;
@@ -30,7 +31,6 @@ public:
         m_sample_rate = sample_rate;
         m_bass.setIntensity(m_cfg.bass_intensity);
         m_exciter.setAmount(m_cfg.phi_amount);
-        m_convolver.loadSyntheticIRS(2048, 0.05f);
         m_convolver.setWetDry(m_cfg.convolver_wet);
         m_convolver.setEnabled(m_cfg.convolver_enabled);
         m_eq.setPeaking(1000.0f, 2.0f, GOLDEN_Q, sample_rate);
@@ -45,7 +45,13 @@ public:
         m_convolver.setEnabled(cfg.convolver_enabled);
     }
 
+    void loadIRS(const std::vector<float>& l, const std::vector<float>& r) {
+        m_convolver.loadCustomIRS(l, r);
+    }
+
     DspConfig getConfig() const { return m_cfg; }
+    float getVuL() const { return m_vu_l.load(); }
+    float getVuR() const { return m_vu_r.load(); }
 
     void process(float* buffer, size_t num_frames) {
         if (m_cfg.bass_enabled) m_bass.processInterleaved(buffer, num_frames, m_sample_rate);
@@ -53,15 +59,24 @@ public:
         if (m_cfg.convolver_enabled) m_convolver.processInterleaved(buffer, num_frames);
         if (m_cfg.eq_enabled) m_eq.processInterleaved(buffer, num_frames);
 
-        // Inaudible Supersonic Signature injection
         m_watermark.processInterleaved(buffer, num_frames);
 
         float vol = m_cfg.master_volume;
-        for (size_t i = 0; i < num_frames * 2; ++i) buffer[i] *= vol;
+        float peak_l = 0.0f, peak_r = 0.0f;
+        for (size_t i = 0; i < num_frames * 2; i += 2) {
+            buffer[i] *= vol;
+            buffer[i + 1] *= vol;
+            float al = std::fabs(buffer[i]);
+            float ar = std::fabs(buffer[i + 1]);
+            if (al > peak_l) peak_l = al;
+            if (ar > peak_r) peak_r = ar;
+        }
+        m_vu_l.store(peak_l);
+        m_vu_r.store(peak_r);
     }
 
 private:
-    DspManager() = default;
+    DspManager() : m_vu_l(0.0f), m_vu_r(0.0f) {}
     DspConfig m_cfg;
     DynamicBass m_bass;
     PhiHarmonicExciter m_exciter;
@@ -69,4 +84,6 @@ private:
     ParametricEQ m_eq;
     SupersonicWatermark m_watermark;
     uint32_t m_sample_rate = 44100;
+    std::atomic<float> m_vu_l;
+    std::atomic<float> m_vu_r;
 };

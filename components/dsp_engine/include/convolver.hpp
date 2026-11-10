@@ -4,17 +4,22 @@
 #include <vector>
 #include <cmath>
 
-// Overlap-Add Partitioned Convolver for IRS Acoustic Correction
-// Stores long acoustic impulse responses in high-speed 32MB PSRAM
 class Convolver {
 public:
-    Convolver() : m_block_size(256), m_wet(0.5f), m_enabled(false) {
+    Convolver() : m_block_size(256), m_wet(0.35f), m_enabled(true) {
         m_overlap_l.resize(m_block_size, 0.0f);
         m_overlap_r.resize(m_block_size, 0.0f);
+        loadSyntheticIRS(2048, 0.05f);
     }
 
     void setWetDry(float wet) { m_wet = wet; }
     void setEnabled(bool en) { m_enabled = en; }
+
+    void loadCustomIRS(const std::vector<float>& ir_l, const std::vector<float>& ir_r) {
+        m_ir_l = ir_l;
+        m_ir_r = ir_r;
+        m_enabled = true;
+    }
 
     void loadSyntheticIRS(size_t length_samples, float decay_rate) {
         m_ir_l.resize(length_samples);
@@ -36,7 +41,6 @@ public:
             float in_l = buffer[i * 2];
             float in_r = buffer[i * 2 + 1];
 
-            // Direct time-domain FIR convolution slice
             float conv_l = in_l * m_ir_l[0] + m_overlap_l[i % m_block_size];
             float conv_r = in_r * m_ir_r[0] + m_overlap_r[i % m_block_size];
 

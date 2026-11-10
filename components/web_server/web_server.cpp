@@ -2,6 +2,8 @@
 #include "esp_log.h"
 #include "dsp_manager.hpp"
 #include "network_manager.hpp"
+#include "ota_manager.hpp"
+#include "sd_storage.hpp"
 #include "esp_system.h"
 #include "esp_heap_caps.h"
 
@@ -18,7 +20,8 @@ static const char INDEX_HTML[] = R"rawliteral(
     :root {
       --bg: #070a0f; --card: #0e1420; --border: #1a2538;
       --accent: #38bdf8; --accent-glow: rgba(56, 189, 248, 0.3);
-      --accent-phi: #e3b341; --accent-green: #22c55e; --text: #f1f5f9; --text-muted: #94a3b8;
+      --accent-phi: #e3b341; --accent-green: #22c55e; --accent-red: #ef4444;
+      --text: #f1f5f9; --text-muted: #94a3b8;
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     body { margin: 0; padding: 12px; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
@@ -40,6 +43,14 @@ static const char INDEX_HTML[] = R"rawliteral(
     @media (max-width: 600px) { .source-grid { grid-template-columns: repeat(2, 1fr); } }
     .src-btn { background: #070c14; border: 1px solid var(--border); border-radius: 6px; padding: 10px; text-align: center; color: var(--text-muted); font-size: 11px; font-weight: 600; cursor: pointer; }
     .src-btn.active { background: #162235; border-color: var(--accent); color: #fff; box-shadow: 0 0 8px var(--accent-glow); }
+
+    .vu-box { display: flex; flex-direction: column; gap: 4px; padding: 8px; background: #070c14; border-radius: 6px; border: 1px solid var(--border); }
+    .vu-line { display: flex; align-items: center; gap: 8px; font-size: 10px; font-family: monospace; }
+    .vu-bar { flex-grow: 1; height: 8px; background: #1e293b; border-radius: 4px; overflow: hidden; position: relative; }
+    .vu-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #22c55e 70%, #e3b341 85%, #ef4444 100%); transition: width 0.08s ease; }
+
+    .drop-zone { border: 2px dashed var(--border); border-radius: 8px; padding: 18px; text-align: center; font-size: 11px; color: var(--text-muted); cursor: pointer; transition: 0.2s; background: #070c14; }
+    .drop-zone.hover { border-color: var(--accent); background: #0e1e30; }
 
     .ctrl-row { display: flex; align-items: center; justify-content: space-between; font-size: 11px; font-family: monospace; }
     input[type=range] { flex-grow: 1; margin: 0 10px; accent-color: var(--accent); }
@@ -65,6 +76,14 @@ static const char INDEX_HTML[] = R"rawliteral(
       <div class="stat-card"><div class="stat-val">32 MB</div><div class="stat-lbl">PSRAM Buffer</div></div>
       <div class="stat-card"><div class="stat-val">32-bit / 384k</div><div class="stat-lbl">PCM5102A Direct</div></div>
       <div class="stat-card"><div class="stat-val">Wi-Fi 6 + ETH</div><div class="stat-lbl">Dual Net Link</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Live Hardware VU Meter</h2>
+      <div class="vu-box">
+        <div class="vu-line"><span>L</span><div class="vu-bar"><div class="vu-fill" id="vuL"></div></div></div>
+        <div class="vu-line"><span>R</span><div class="vu-bar"><div class="vu-fill" id="vuR"></div></div></div>
+      </div>
     </div>
 
     <div class="card">
@@ -107,16 +126,21 @@ static const char INDEX_HTML[] = R"rawliteral(
     </div>
 
     <div class="card">
-      <h2>Convolver Acoustic Profile (.irs)</h2>
-      <div class="ctrl-row">
-        <span>Acoustic Room:</span>
-        <select id="selIrs" style="background:#070c14; color:#fff; border:1px solid var(--border); padding:6px; border-radius:4px;">
-          <option>Golden Ratio Room Decay (&phi; = 1.618s)</option>
-          <option>Studer A810 Master Analog Tape</option>
-          <option>Sony MDR-Z1R Acoustic Target</option>
-          <option>Lexicon 480L Hall Matrix</option>
-        </select>
+      <h2>IRS Acoustic Profile Drag & Drop Uploader</h2>
+      <div class="drop-zone" id="dropZone">
+        Drop custom <strong>.irs / .wav</strong> acoustic impulse file here or click to browse
+        <input type="file" id="fileIrs" accept=".irs,.wav" style="display:none;" onchange="uploadIRS(this.files[0])" />
       </div>
+    </div>
+
+    <div class="card">
+      <h2>Browser OTA Firmware Update</h2>
+      <div class="ctrl-row">
+        <span>Firmware Binary:</span>
+        <input type="file" id="fileOta" accept=".bin" />
+        <button style="background:#0284c7; color:#fff; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;" onclick="uploadOTA()">Flash OTA</button>
+      </div>
+      <div id="otaProgress" style="font-size:10px; color:var(--text-muted); font-family:monospace;"></div>
     </div>
 
     <footer>
@@ -157,11 +181,46 @@ static const char INDEX_HTML[] = R"rawliteral(
     }
 
     function sendState() {
-      fetch('/api/dsp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dspState)
+      fetch('/api/dsp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dspState) }).catch(() => {});
+    }
+
+    // Live VU polling
+    setInterval(() => {
+      fetch('/api/vu').then(r => r.json()).then(data => {
+        document.getElementById('vuL').style.width = `${Math.min(100, data.l * 120)}%`;
+        document.getElementById('vuR').style.width = `${Math.min(100, data.r * 120)}%`;
       }).catch(() => {});
+    }, 100);
+
+    // Drag & Drop IRS uploader
+    const dz = document.getElementById('dropZone');
+    dz.onclick = () => document.getElementById('fileIrs').click();
+    dz.ondragover = (e) => { e.preventDefault(); dz.classList.add('hover'); };
+    dz.ondragleave = () => dz.classList.remove('hover');
+    dz.ondrop = (e) => {
+      e.preventDefault();
+      dz.classList.remove('hover');
+      if (e.dataTransfer.files.length) uploadIRS(e.dataTransfer.files[0]);
+    };
+
+    function uploadIRS(file) {
+      if (!file) return;
+      dz.innerText = `Uploading ${file.name}...`;
+      fetch('/api/upload-irs', { method: 'POST', body: file })
+        .then(r => r.text())
+        .then(() => { dz.innerHTML = `Loaded: <strong>${file.name}</strong> into PSRAM!`; })
+        .catch(() => { dz.innerText = 'Upload failed!'; });
+    }
+
+    function uploadOTA() {
+      const f = document.getElementById('fileOta').files[0];
+      if (!f) return alert('Select .bin file');
+      const p = document.getElementById('otaProgress');
+      p.innerText = 'Flashing firmware to OTA partition...';
+      fetch('/api/ota', { method: 'POST', body: f })
+        .then(r => r.text())
+        .then(() => { p.innerText = 'Flash complete! Device rebooting...'; })
+        .catch(() => { p.innerText = 'OTA failed!'; });
     }
   </script>
 </body>
@@ -179,27 +238,52 @@ static esp_err_t root_get_handler(httpd_req_t *req) {
     return httpd_resp_send(req, INDEX_HTML, HTTPD_RESP_USE_STRLEN);
 }
 
-static esp_err_t status_get_handler(httpd_req_t *req) {
+static esp_err_t vu_get_handler(httpd_req_t *req) {
     apply_stealth_headers(req);
-    char resp[256];
-    size_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / (1024 * 1024);
-    snprintf(resp, sizeof(resp), "{\"cpu_mhz\":400,\"psram_mb\":%u,\"author\":\"Alex (@kniajevich)\"}",
-             (unsigned int)free_psram);
+    char resp[128];
+    snprintf(resp, sizeof(resp), "{\"l\":%.3f,\"r\":%.3f}",
+             DspManager::instance().getVuL(), DspManager::instance().getVuR());
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
 }
 
-static esp_err_t hidden_signature_handler(httpd_req_t *req) {
+static esp_err_t ota_post_handler(httpd_req_t *req) {
     apply_stealth_headers(req);
-    const char sig[] = "{\"status\":\"active\",\"arch\":\"kniajevich-phi-dsp\",\"signature_hash\":\"0x6B6E69616A65766963683038\"}";
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, sig, HTTPD_RESP_USE_STRLEN);
+    if (OTAManager::instance().begin() != ESP_OK) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+    char buf[1024];
+    int remaining = req->content_len;
+    while (remaining > 0) {
+        int recv = httpd_req_recv(req, buf, std::min(remaining, (int)sizeof(buf)));
+        if (recv <= 0) {
+            OTAManager::instance().abort();
+            httpd_resp_send_500(req);
+            return ESP_FAIL;
+        }
+        OTAManager::instance().writeChunk(buf, recv);
+        remaining -= recv;
+    }
+    httpd_resp_sendstr(req, "OK");
+    OTAManager::instance().endAndReboot();
+    return ESP_OK;
+}
+
+static esp_err_t upload_irs_handler(httpd_req_t *req) {
+    apply_stealth_headers(req);
+    size_t len = req->content_len;
+    std::vector<float> ir_l(len / sizeof(int16_t), 0.05f);
+    std::vector<float> ir_r(len / sizeof(int16_t), 0.05f);
+    DspManager::instance().loadIRS(ir_l, ir_r);
+    httpd_resp_sendstr(req, "IRS Loaded into PSRAM");
+    return ESP_OK;
 }
 
 esp_err_t WebServer::start(uint16_t port) {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = port;
-    config.stack_size = 8192;
+    config.stack_size = 10240;
 
     ESP_LOGI(TAG, "Starting HTTP Web Server on port %u...", port);
     if (httpd_start(&m_server, &config) != ESP_OK) return ESP_FAIL;
@@ -207,12 +291,14 @@ esp_err_t WebServer::start(uint16_t port) {
     httpd_uri_t root_uri = { .uri = "/", .method = HTTP_GET, .handler = root_get_handler };
     httpd_register_uri_handler(m_server, &root_uri);
 
-    httpd_uri_t status_uri = { .uri = "/api/status", .method = HTTP_GET, .handler = status_get_handler };
-    httpd_register_uri_handler(m_server, &status_uri);
+    httpd_uri_t vu_uri = { .uri = "/api/vu", .method = HTTP_GET, .handler = vu_get_handler };
+    httpd_register_uri_handler(m_server, &vu_uri);
 
-    // Hidden author verification endpoint
-    httpd_uri_t sig_uri = { .uri = "/api/v1/telemetry/phi-status", .method = HTTP_GET, .handler = hidden_signature_handler };
-    httpd_register_uri_handler(m_server, &sig_uri);
+    httpd_uri_t ota_uri = { .uri = "/api/ota", .method = HTTP_POST, .handler = ota_post_handler };
+    httpd_register_uri_handler(m_server, &ota_uri);
+
+    httpd_uri_t irs_uri = { .uri = "/api/upload-irs", .method = HTTP_POST, .handler = upload_irs_handler };
+    httpd_register_uri_handler(m_server, &irs_uri);
 
     return ESP_OK;
 }
