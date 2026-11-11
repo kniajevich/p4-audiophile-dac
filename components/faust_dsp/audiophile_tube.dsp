@@ -1,46 +1,39 @@
-declare name "AudiophileTubeP4";
+declare name "AudiophileTubePhi";
 declare author "Alex (kniajevich)";
 declare license "GNU AGPLv3";
 
 import("stdfaust.lib");
 
-// Сглаженные параметры управления (убирает щелчки при регулировке)
+phi = (1.0 + sqrt(5.0)) / 2.0;
+q_phi = 1.0 / phi;
+
+// Fibonacci Frequencies (Hz)
+f_sub      = 55.0;
+f_warmth   = 377.0;
+f_presence = 2584.0;
+f_air      = 6765.0;
+
+// Saturation parameters
 drive   = hslider("Drive", 1.2, 1.0, 4.0, 0.01) : si.smoo;
 bias    = hslider("Grid_Bias", 0.18, 0.0, 0.4, 0.005) : si.smoo;
-warmth  = hslider("Warmth_Hz", 16000, 4000, 20000, 10) : si.smoo;
 mix     = hslider("Dry_Wet", 0.5, 0.0, 1.0, 0.01) : si.smoo;
 
-// Асимметричный ламповый триод с безопасной нормализацией
-triode(x) = safe_out
+// Phi-EQ Band Gains (dB)
+g_sub      = hslider("Phi_Sub_dB", 0.0, -6.0, 6.0, 0.1) : si.smoo;
+g_warmth   = hslider("Phi_Warmth_dB", 0.0, -6.0, 6.0, 0.1) : si.smoo;
+g_presence = hslider("Phi_Presence_dB", 0.0, -6.0, 6.0, 0.1) : si.smoo;
+g_air      = hslider("Phi_Air_dB", 0.0, -6.0, 6.0, 0.1) : si.smoo;
+
+triode(x) = (v_plate / max_neg) : fi.dcblockerat(15.0)
 with {
-    // Входной сигнал с легким софт-клипом
-    in_sat = ma.tanh(x * drive);
-    
-    // Смещение рабочей точки сетки триода
-    v_grid = in_sat + bias;
-    
-    // Асимметричная передаточная функция (эмуляция ВАХ триода)
-    v_plate = ma.tanh(v_grid) - ma.tanh(bias);
-    
-    // Автобалансировка коэффициента усиления: расчет максимального отрицательного размаха
-    max_neg_swing = abs(ma.tanh(-1.0 * drive + bias) - ma.tanh(bias)) + 1e-6;
-    
-    // Нормализация строго в диапазон [-1.0, +1.0]
-    norm_signal = v_plate / max_neg_swing;
-    
-    // Цифровой межкаскадный конденсатор (отсекаем динамическую постоянку ниже 15 Гц)
-    safe_out = norm_signal : fi.dcblockerat(15.0);
+    v_plate = ma.tanh(ma.tanh(x * drive) + bias) - ma.tanh(bias);
+    max_neg = abs(ma.tanh(-1.0 * drive + bias) - ma.tanh(bias)) + 1e-6;
 };
 
-// Обработка одного канала без фазового расслоения
-tube_channel(x) = (dry_wet : post_filter)
-with {
-    // Чистый микс без гребенчатой дефазировки
-    dry_wet = x * (1.0 - mix) + triode(x) * mix;
-    
-    // Мягкий Low-Pass на выходе всего каскада (без расфазировки с dry)
-    post_filter = fi.lowpass(1, warmth);
-};
+eq_section = fi.peak_eq_cq(g_sub, f_sub, q_phi) :
+             fi.peak_eq_cq(g_warmth, f_warmth, q_phi) :
+             fi.peak_eq_cq(g_presence, f_presence, q_phi) :
+             fi.peak_eq_cq(g_air, f_air, q_phi);
 
-// Стерео-процессинг
-process = tube_channel, tube_channel;
+tube_chain(x) = (x * (1.0 - mix) + triode(x) * mix) : eq_section;
+process = tube_chain, tube_chain;
