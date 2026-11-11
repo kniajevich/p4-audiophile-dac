@@ -28,60 +28,56 @@ void FaustDSP::process(const float* in_l, const float* in_r, float* out_l, float
     const float target_warmth = m_target_warmth.load(std::memory_order_relaxed);
     const float target_mix    = m_target_mix.load(std::memory_order_relaxed);
 
-    // si.smoo коэффициент сглаживания (эквивалент ~25 мс для подавления zipper noise)
-    const float smoo_alpha = 0.0025f;
+    // k-rate: Сглаживание параметров пропорционально размеру блока сэмплов
+    const float block_smoo = 1.0f - std::exp(-static_cast<float>(frames) / (0.025f * static_cast<float>(m_sample_rate)));
+    m_cur_drive  += block_smoo * (target_drive  - m_cur_drive);
+    m_cur_bias   += block_smoo * (target_bias   - m_cur_bias);
+    m_cur_warmth += block_smoo * (target_warmth - m_cur_warmth);
+    m_cur_mix    += block_smoo * (target_mix    - m_cur_mix);
 
-    // Коэффициент DC-blocker на 15.0 Гц: R = 1 - (2 * pi * fc / fs)
-    const float r_dc = 1.0f - (2.0f * 3.141592653589793f * 15.0f / static_cast<float>(m_sample_rate));
+    // k-rate: Вынос всех тяжёлых расчётов нормализации и фильтров за пределы цикла
+    const float cur_drive = m_cur_drive;
+    const float cur_bias  = m_cur_bias;
+    const float cur_mix   = m_cur_mix;
+    const float cur_dry   = 1.0f - cur_mix;
+
+    const float tanh_bias = fast_tanh(cur_bias);
+    const float max_neg_swing = std::abs(fast_tanh(-1.0f * cur_drive + cur_bias) - tanh_bias) + 1e-6f;
+    const float inv_neg_swing = 1.0f / max_neg_swing;
+
+    // k-rate: Расчёт констант фильтров
     const float dt = 1.0f / static_cast<float>(m_sample_rate);
+    const float rc = 1.0f / (2.0f * 3.141592653589793f * m_cur_warmth);
+    const float alpha_lpf = dt / (rc + dt);
+    const float r_dc = 1.0f - (2.0f * 3.141592653589793f * 15.0f * dt);
 
+    // a-rate: Внутренний оптимизированный аудиоцикл (только умножения, сложения и fast_tanh)
     for (size_t i = 0; i < frames; ++i) {
-        // Посэмпловое сглаживание параметров (si.smoo)
-        m_cur_drive  += smoo_alpha * (target_drive  - m_cur_drive);
-        m_cur_bias   += smoo_alpha * (target_bias   - m_cur_bias);
-        m_cur_warmth += smoo_alpha * (target_warmth - m_cur_warmth);
-        m_cur_mix    += smoo_alpha * (target_mix    - m_cur_mix);
+        // Левый канал
+        const float xl = in_l[i];
+        const float in_sat_l = fast_tanh(xl * cur_drive);
+        const float v_plate_l = fast_tanh(in_sat_l + cur_bias) - tanh_bias;
+        const float norm_l = v_plate_l * inv_neg_swing;
 
-        const float tanh_bias = std::tanh(m_cur_bias);
-        // Автобалансировка максимального размаха: исключает клиппинг отрицательной полуволны
-        const float max_neg_swing = std::abs(std::tanh(-1.0f * m_cur_drive + m_cur_bias) - tanh_bias) + 1e-6f;
-        const float inv_neg_swing = 1.0f / max_neg_swing;
-
-        // Коэффициент выходного ФНЧ каскада
-        const float rc = 1.0f / (2.0f * 3.141592653589793f * m_cur_warmth);
-        const float alpha_lpf = dt / (rc + dt);
-
-        // --- ЛЕВЫЙ КАНАЛ ---
-        float xl = in_l[i];
-        float in_sat_l = std::tanh(xl * m_cur_drive);
-        float v_plate_l = std::tanh(in_sat_l + m_cur_bias) - tanh_bias;
-        float norm_l = v_plate_l * inv_neg_swing;
-
-        // Цифровой межкаскадный конденсатор (15 Гц DC-Blocker)
-        float safe_tube_l = norm_l - m_dc_x_l + r_dc * m_dc_y_l;
+        const float safe_tube_l = norm_l - m_dc_x_l + r_dc * m_dc_y_l;
         m_dc_x_l = norm_l;
         m_dc_y_l = safe_tube_l;
 
-        // Суммирование Dry/Wet без гребенчатой фильтрации
-        float dry_wet_l = xl * (1.0f - m_cur_mix) + safe_tube_l * m_cur_mix;
-        // Мягкий выходной ФНЧ поверх всего сигнала
+        const float dry_wet_l = xl * cur_dry + safe_tube_l * cur_mix;
         m_post_lpf_l += alpha_lpf * (dry_wet_l - m_post_lpf_l);
         out_l[i] = m_post_lpf_l;
 
-        // --- ПРАВЫЙ КАНАЛ ---
-        float xr = in_r[i];
-        float in_sat_r = std::tanh(xr * m_cur_drive);
-        float v_plate_r = std::tanh(in_sat_r + m_cur_bias) - tanh_bias;
-        float norm_r = v_plate_r * inv_neg_swing;
+        // Правый канал
+        const float xr = in_r[i];
+        const float in_sat_r = fast_tanh(xr * cur_drive);
+        const float v_plate_r = fast_tanh(in_sat_r + cur_bias) - tanh_bias;
+        const float norm_r = v_plate_r * inv_neg_swing;
 
-        // Цифровой межкаскадный конденсатор (15 Гц DC-Blocker)
-        float safe_tube_r = norm_r - m_dc_x_r + r_dc * m_dc_y_r;
+        const float safe_tube_r = norm_r - m_dc_x_r + r_dc * m_dc_y_r;
         m_dc_x_r = norm_r;
         m_dc_y_r = safe_tube_r;
 
-        // Суммирование Dry/Wet без гребенчатой фильтрации
-        float dry_wet_r = xr * (1.0f - m_cur_mix) + safe_tube_r * m_cur_mix;
-        // Мягкий выходной ФНЧ поверх всего сигнала
+        const float dry_wet_r = xr * cur_dry + safe_tube_r * cur_mix;
         m_post_lpf_r += alpha_lpf * (dry_wet_r - m_post_lpf_r);
         out_r[i] = m_post_lpf_r;
     }

@@ -14,7 +14,6 @@ public:
     void init(uint32_t sample_rate);
     void process(const float* in_l, const float* in_r, float* out_l, float* out_r, size_t frames);
 
-    // Потокобезопасная установка целевых параметров
     void setDrive(float drive) { m_target_drive.store(drive, std::memory_order_relaxed); }
     void setBias(float bias) { m_target_bias.store(bias, std::memory_order_relaxed); }
     void setWarmth(float hz) { m_target_warmth.store(hz, std::memory_order_relaxed); }
@@ -31,25 +30,31 @@ private:
     FaustDSP();
     ~FaustDSP() = default;
 
+    // Быстрая рациональная аппроксимация Паде [3/2] для тангенса
+    static inline float fast_tanh(float x) {
+        if (x <= -3.0f) return -1.0f;
+        if (x >= 3.0f)  return 1.0f;
+        const float x2 = x * x;
+        return x * (27.0f + x2) / (27.0f + 9.0f * x2);
+    }
+
     uint32_t m_sample_rate = 48000;
 
-    // Состояния фильтра DC-blocker (15 Гц, межкаскадный конденсатор)
+    // Состояния IIR фильтров
     float m_dc_x_l = 0.0f;
     float m_dc_y_l = 0.0f;
     float m_dc_x_r = 0.0f;
     float m_dc_y_r = 0.0f;
-
-    // Состояния выходного сглаживающего ФНЧ
     float m_post_lpf_l = 0.0f;
     float m_post_lpf_r = 0.0f;
 
-    // Текущие сглаженные параметры (si.smoo)
+    // Сглаженные рабочие параметры k-rate
     float m_cur_drive = 1.2f;
     float m_cur_bias = 0.18f;
     float m_cur_warmth = 16000.0f;
     float m_cur_mix = 0.5f;
 
-    // Целевые атомарные параметры из веб-интерфейса
+    // Атомарные целевые уставки
     std::atomic<float> m_target_drive{1.2f};
     std::atomic<float> m_target_bias{0.18f};
     std::atomic<float> m_target_warmth{16000.0f};
